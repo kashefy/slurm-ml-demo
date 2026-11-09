@@ -49,5 +49,9 @@ and concrete findings in the handoff; the project must run without that skill.
 - [ ] Fill the external profile and run the three stages manually in the SIF.
 - [ ] Check site options/resources, then choose when to submit on the cluster.
 
-Initial host verification: four ML tests and five scheduler/runtime-mock tests
+Host verification: four ML tests and seven scheduler/runtime-mock tests
 pass. ShellCheck unavailable. Container and real scheduler behavior unverified.
+
+Configuration defaults to `${XDG_CONFIG_HOME:-$HOME/.config}/slurm-ml-demo/cluster.sh`.
+Set SLURM_ML_CONFIG_DIR to change its directory or pass an explicit profile file;
+selection does not require source edits and is tested with local mocks.

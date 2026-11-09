@@ -5,6 +5,13 @@ summary. Python trains from explicit index files; Bash knows the folds; Slurm
 schedules them. No dataset download, tuning or tracking service.
 See [PLAN.md](PLAN.md) for the implementation checklist and remaining checks.
 
+**HPC configuration:** the launcher reads
+`${XDG_CONFIG_HOME:-$HOME/.config}/slurm-ml-demo/cluster.sh` by default
+(normally `~/.config/slurm-ml-demo/cluster.sh`), outside the checkout. Set
+`SLURM_ML_CONFIG_DIR=/your/private/shared/directory` to use that directory's
+cluster.sh instead. No code changes are needed. Start with the
+[private configuration setup](#private-configuration-and-human-submission).
+
 ## Local ML pipeline
 
 Use an existing environment or install requirements on a connected development
@@ -77,7 +84,7 @@ repository). These commands are for you to run, not part of the jobs:
 
 ```bash
 cd /chosen/shared/slurm-ml-demo
-profile_dir="${XDG_CONFIG_HOME:-$HOME/.config}/slurm-ml-demo"
+profile_dir="${SLURM_ML_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/slurm-ml-demo}"
 mkdir -p "$profile_dir"
 chmod 700 "$profile_dir"
 # Run this copy once; do not overwrite an existing configured profile.
@@ -110,10 +117,26 @@ No passwords or tokens are needed for this demo.
 Source only a profile you own and trust; it is executable Bash. The profile
 itself, PROJECT, RUN_ROOT and IMAGE must be accessible at the same absolute
 paths from submission and compute nodes. If your config home is not shared,
-choose a different private shared profile location. The example paths below are
-placeholders: replace /chosen/private/profile.sh with the profile you created.
-You can pass another external profile to switch clusters; there is no automatic
-profile discovery or copying of real settings into the checkout.
+choose a different private shared profile location. The commands below use the
+profile selected by the default or your override.
+Profile selection is: explicit PROFILE argument, then
+`$SLURM_ML_CONFIG_DIR/cluster.sh`, then the default shown above. The resolved
+absolute filename is passed to batch jobs; compute nodes do not need to inherit
+the selection variable. No real settings are copied into the checkout.
+
+To choose a different location, set the directory before the setup block above:
+
+```bash
+cd /chosen/shared/slurm-ml-demo
+export SLURM_ML_CONFIG_DIR='/your/private/shared/directory'
+# Create/edit cluster.sh there using the setup instructions above.
+bash jobs/submit.sh --preview
+```
+
+You may put that export in your own shell startup file for reuse. Alternatively,
+pass a full profile filename for a one-off cluster selection; it takes precedence
+over the variable and default. A missing selected profile produces an error
+before any submission; the launcher does not create a profile or fall back.
 
 The runner binds project read-only at /project and a fresh writable run at /run;
 runtime default mounts still follow site policy. Bind paths support spaces but
@@ -123,19 +146,22 @@ No image pulls or downloads happen in jobs. First test the container manually:
 ```bash
 cd /chosen/shared/slurm-ml-demo
 mkdir -p /chosen/shared/private/manual-run
-bash jobs/run.sh prepare "$PWD" /chosen/shared/private/manual-run /chosen/private/profile.sh
+profile="${SLURM_ML_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/slurm-ml-demo}/cluster.sh"
+bash jobs/run.sh prepare "$PWD" /chosen/shared/private/manual-run "$profile"
 for fold in 0 1 2; do
-  bash jobs/run.sh train "$PWD" /chosen/shared/private/manual-run /chosen/private/profile.sh "$fold"
+  bash jobs/run.sh train "$PWD" /chosen/shared/private/manual-run "$profile" "$fold"
 done
-bash jobs/run.sh aggregate "$PWD" /chosen/shared/private/manual-run /chosen/private/profile.sh
+bash jobs/run.sh aggregate "$PWD" /chosen/shared/private/manual-run "$profile"
 ```
 
 Then you can preview and submit from the cluster submission host:
 
 ```bash
 cd /chosen/shared/slurm-ml-demo
-bash jobs/submit.sh /chosen/private/profile.sh --preview
-bash jobs/submit.sh /chosen/private/profile.sh
+bash jobs/submit.sh --preview
+bash jobs/submit.sh
+# One-off override, without changing code or shell settings:
+# bash jobs/submit.sh /another/private/cluster.sh --preview
 ```
 
 Preview creates a fresh private run and prints commands with symbolic IDs but
@@ -156,9 +182,9 @@ for file in jobs/*.sh jobs/*.sbatch config.example.sh; do bash -n "$file"; done
 shellcheck jobs/*.sh jobs/*.sbatch config.example.sh  # if available
 ```
 
-Four host ML tests and five scheduler/runtime-mock tests pass. Checks cover
+Four host ML tests and seven scheduler/runtime-mock tests pass. Checks cover
 reproducible splits, result rejection, dependency wiring, fold mapping, spooling,
-spaces, preview and partial failures. Recorded host accuracies: 0.9833, 0.9933,
+spaces, profile selection, preview and partial failures. Recorded host accuracies: 0.9833, 0.9933,
 0.9733; mean 0.9833, population std 0.00818. ShellCheck unavailable. Container
 imports/execution, SIF conversion and real Slurm remain unverified. No cluster
 was contacted; mocks do not execute a container or establish site compatibility.

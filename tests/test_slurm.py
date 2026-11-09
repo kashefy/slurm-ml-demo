@@ -111,6 +111,38 @@ Path(os.environ['RUNTIME_CALLS']).write_text(json.dumps(sys.argv[1:]))
         self.assertNotEqual(proc.returncode, 0)
         self.assertFalse(self.runtime_calls.exists())
 
+    def test_default_override_and_explicit_profile(self):
+        config_home = self.base / 'config home'
+        default = config_home / 'slurm-ml-demo/cluster.sh'
+        override = self.base / 'custom config/cluster.sh'
+        for profile in (default, override):
+            profile.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(self.profile, profile)
+        cases = [
+            ([], {}, default),
+            ([], {'SLURM_ML_CONFIG_DIR': str(override.parent)}, override),
+            ([str(self.profile)], {'SLURM_ML_CONFIG_DIR': str(self.base / 'absent')}, self.profile),
+        ]
+        for args, settings, expected in cases:
+            with self.subTest(profile=expected):
+                self.calls.unlink(missing_ok=True)
+                env = dict(self.env, XDG_CONFIG_HOME=str(config_home))
+                env.pop('SLURM_ML_CONFIG_DIR', None)
+                env.update(settings)
+                proc = subprocess.run(['bash', str(self.project / 'jobs/submit.sh'), *args],
+                                      env=env, capture_output=True, text=True)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
+                self.assertEqual(calls[0][-1], str(expected.resolve()))
+
+    def test_missing_default_profile_fails_before_submission(self):
+        env = dict(self.env, SLURM_ML_CONFIG_DIR=str(self.base / 'not configured'))
+        proc = subprocess.run(['bash', str(self.project / 'jobs/submit.sh')],
+                              env=env, capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn('SLURM_ML_CONFIG_DIR', proc.stderr)
+        self.assertFalse(self.calls.exists())
+
     def test_shell_syntax(self):
         for file in (*ROOT.joinpath('jobs').iterdir(), ROOT / 'config.example.sh'):
             subprocess.run(['bash', '-n', str(file)], check=True)

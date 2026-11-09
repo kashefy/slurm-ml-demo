@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-[[ $# == 1 || ( $# == 2 && $2 == --preview ) ]] || { echo 'usage: submit.sh PROFILE [--preview]' >&2; exit 2; }
-profile=$(realpath "$1")
-preview=${2-}
+usage() { echo 'usage: submit.sh [PROFILE] [--preview]' >&2; exit 2; }
+profile_arg='' preview=''
+for arg in "$@"; do
+  case "$arg" in
+    --preview) [[ -z $preview ]] || usage; preview=$arg ;;
+    --*) usage ;;
+    *) [[ -z $profile_arg ]] || usage; profile_arg=$arg ;;
+  esac
+done
+profile_path=${profile_arg:-${SLURM_ML_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/slurm-ml-demo}/cluster.sh}
+[[ -f $profile_path && -r $profile_path ]] || {
+  printf 'Configuration not found or unreadable: %s\nCopy config.example.sh there, set SLURM_ML_CONFIG_DIR, or pass PROFILE.\n' "$profile_path" >&2
+  exit 2
+}
+profile=$(realpath "$profile_path")
 source "$profile" # Trusted, user-owned shell configuration.
 : "${PROJECT:?}" "${RUN_ROOT:?}" "${RUNTIME:?}" "${IMAGE:?}" "${ARRAY_CONCURRENCY:?}"
 PROJECT=$(realpath "$PROJECT")
