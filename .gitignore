@@ -1,0 +1,6 @@
+/work/
+/artifacts/
+__pycache__/
+*.pyc
+*.sif
+.venv/
