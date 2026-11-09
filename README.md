@@ -65,12 +65,55 @@ passes the import and manual workflow checks below.
 
 ## Private configuration and human submission
 
-Copy [config.example.sh](config.example.sh) outside this project **and** the
-skill repository. Use a private directory with mode 700 and file mode 600.
-Fill PROJECT, RUN_ROOT, RUNTIME, IMAGE, concurrency and per-stage resource/site
-options. Source only a profile you own and trust; it is executable Bash.
-Choose export/invalid-dependency policy with your site. Load any required
-runtime modules in the profile. Paths must be shared identically across nodes.
+This demo uses **external private profiles**, outside the Git working copy.
+Only [config.example.sh](config.example.sh), containing placeholders, is
+committed. This keeps local cluster settings out of commits without relying on
+.gitignore. The launcher rejects profiles and run directories inside PROJECT.
+There is no second in-repo configuration mode in this small example.
+
+On the cluster submission host, create a profile in your shared home directory
+(or choose another private shared location outside this project and the skill
+repository). These commands are for you to run, not part of the jobs:
+
+```bash
+cd /chosen/shared/slurm-ml-demo
+profile_dir="${XDG_CONFIG_HOME:-$HOME/.config}/slurm-ml-demo"
+mkdir -p "$profile_dir"
+chmod 700 "$profile_dir"
+# Run this copy once; do not overwrite an existing configured profile.
+cp -n config.example.sh "$profile_dir/cluster.sh"
+chmod 600 "$profile_dir/cluster.sh"
+```
+
+Edit that external cluster.sh locally using your preferred editor:
+
+| Variable | What to enter |
+| --- | --- |
+| PROJECT | Absolute path to this checkout on shared storage |
+| RUN_ROOT | Private shared directory outside both repositories; fresh runs, logs and receipts go here |
+| RUNTIME | Apptainer/Singularity executable available on compute nodes |
+| IMAGE | Absolute path to the already staged and verified SIF |
+| ARRAY_CONCURRENCY | Number of simultaneous folds, from 1 to 3, within site limits |
+| PREPARE_SBATCH_OPTIONS | Bash array of site/resource options for preparation |
+| TRAIN_SBATCH_OPTIONS | Bash array of options for each training task |
+| AGGREGATE_SBATCH_OPTIONS | Bash array of options for aggregation |
+
+Put account, partition and QoS into the applicable option arrays using your
+site's values, for example `--account=YOUR_ACCOUNT` and
+`--partition=YOUR_PARTITION`; replace those placeholders before use. Omit options
+your site does not require. Set CPU, memory and time requests for each stage;
+empty arrays deliberately use site defaults, not resource recommendations.
+Choose export/invalid-dependency policy with your site. If needed, source the
+site's module initialization and load the runtime module in this private file.
+No passwords or tokens are needed for this demo.
+
+Source only a profile you own and trust; it is executable Bash. The profile
+itself, PROJECT, RUN_ROOT and IMAGE must be accessible at the same absolute
+paths from submission and compute nodes. If your config home is not shared,
+choose a different private shared profile location. The example paths below are
+placeholders: replace /chosen/private/profile.sh with the profile you created.
+You can pass another external profile to switch clusters; there is no automatic
+profile discovery or copying of real settings into the checkout.
 
 The runner binds project read-only at /project and a fresh writable run at /run;
 runtime default mounts still follow site policy. Bind paths support spaces but
